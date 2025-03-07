@@ -1,0 +1,15 @@
+[project]
+name = "archerdfu.reticle2"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.10"
+dependencies = [
+    "construct>=2.10.70",
+    "typing-extensions>=4.12.2",
+]
+
+[dependency-groups]
+dev = [
+    "pillow>=11.1.0",
+    "pyqt6>=6.8.1",
+]
