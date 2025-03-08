@@ -53,9 +53,9 @@ def loads(__b: bytes):
 
 
 def load(__fp: IO[bytes]):
-    b = __fp.read()
     if 'b' not in getattr(__fp, 'mode', ''):
         raise TypeError("File must be opened in binary mode, e.g. use `open('foo.reticle2', 'rb')`") from None
+    b = __fp.read()
     return loads(b)
 
 
