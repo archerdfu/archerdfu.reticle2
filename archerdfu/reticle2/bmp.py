@@ -45,9 +45,8 @@ BMP = Struct(
 )
 
 
-def _create_bmp_headers(matrix, bits=24) -> (dict, dict):
-    height = len(matrix)
-    width = len(matrix[0])
+def _create_bmp_headers(size=(640, 480), bits=24) -> (dict, dict):
+    width, height = size
 
     # Calculate file size
     pixel_data_size = height * width * (bits // 8)
@@ -79,7 +78,7 @@ def _create_bmp_headers(matrix, bits=24) -> (dict, dict):
 
 
 def matrix_to_bmp(matrix: list[list[int]], bits: int = 24) -> bytes:
-    header_data, dib_header_data = _create_bmp_headers(matrix, bits)
+    header_data, dib_header_data = _create_bmp_headers((len(matrix[0]), len(matrix)), bits)
 
     def extract_rgb(pixel: int):
         red = pixel >> 16 & 0xFF
@@ -150,3 +149,20 @@ def bmp_to_matrix(bmp_data: bytes) -> list[list[int]]:
             matrix.append(row)
             row = []
     return matrix
+
+
+if __name__ == "__main__":
+    def extract_rgb1(pixel: int):
+        red = pixel >> 16 & 0xFF
+        green = pixel >> 8 & 0xFF
+        blue = pixel & 0xFF
+        return bytes((blue, green, red))
+
+
+    def extract_rgb2(pixel: int):
+        return pixel.to_bytes(3, 'big')
+
+
+    pxl = 0 << 16 | 127 << 8 | 255
+    print(extract_rgb1(pxl))
+    print(extract_rgb2(pxl))

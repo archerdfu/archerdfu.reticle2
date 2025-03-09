@@ -2,7 +2,7 @@ from construct import ConstructError
 from typing_extensions import IO
 
 from archerdfu.reticle2 import framebuf
-from archerdfu.reticle2.bmp import matrix_to_bmp
+from archerdfu.reticle2.bmp import _create_bmp_headers, BMP
 from archerdfu.reticle2.typedefs import TReticle2Parse
 
 
@@ -75,63 +75,68 @@ def reticle2bmp(img_data, size=(640, 480), cross=False, grid=False):
     for el in img_data:
         if grid and el.x == 700 and el.q == 0:
             f_buf.line(340, 240 + el.y, 640, 240 + el.y, 0x00CF00)
-
         f_buf.line(el.x, el.y, el.x + el.q - 1, el.y, 0x000000)
 
-    # Convert framebuffer buffer to BMP pixel matrix
-    matrix = []
-    row_size = width * 3  # 3 bytes per pixel (RGB888)
-    for y in reversed(range(height)):  # BMP stores pixels bottom-up
-        row_start = y * row_size
-        row = []
-        for x in range(0, row_size, 3):
-            b, g, r = buf[row_start + x:row_start + x + 3]  # Extract RGB components
-            row.append((r << 16) | (g << 8) | b)  # Convert to 0xRRGGBB format
-        matrix.append(row)
+    # Build bmp from framebuffer
+    header_data, dib_header_data = _create_bmp_headers((width, height), 24)
+    # Convert the matrix of pixels to bytes
+    pixel_data = (f_buf.pixel(x, y).to_bytes(3, 'big') for y in reversed(range(height)) for x in range(width))
 
-    return matrix_to_bmp(matrix)
-
-
-def extract_reticle2(src, dest, *, extract_hold=False):
-    from threading import Thread
-    from pathlib import Path
-
-    with open(src, 'rb') as fp:
-        reticle = load(fp)
-
-    def dump(con, path):
-        buf = reticle2bmp(con)
-
-        with open(path, 'wb') as fp:
-            fp.write(buf)
-
-    Path(dest).mkdir(parents=True, exist_ok=True)
-
-    threads = []
-
-    reticle.reticles.pop("_io")
-    if not extract_hold:
-        reticle.reticles.pop("hold")
-
-    for k, v in reticle.reticles.items():
-
-        for i, ret in enumerate(v):
-
-            for j, z in enumerate(ret):
-
-                if len(z) <= 0 or (j != 0 and ret[0] == z):
-                    continue
-
-                filename = Path(dest, f"{k}_{str(i + 1)}_{j + 1}.bmp")
-                threads.append(Thread(target=dump, args=[z.copy(), filename]))
-
-    for t in threads:
-        t.start()
-
-    for t in threads:
-        t.join()
+    # Create the BMP data
+    bmp_data = {
+        "header": header_data,
+        "dib_header": dib_header_data,
+        "color_palette": None,
+        "pixel_data": pixel_data,
+    }
+    return BMP.build(bmp_data)
 
 
 if __name__ == '__main__':
+    from threading import Thread
+    from pathlib import Path
+    # from PIL import Image
+    # from io import BytesIO
+
+    def extract_reticle2(src, dest, *, extract_hold=False):
+
+        with open(src, 'rb') as fp:
+            reticle = load(fp)
+
+        def dump(con, path):
+            buf = reticle2bmp(con)
+            # img = Image.open(BytesIO(buf))
+            # img.show()
+            # exit(1)
+            with open(path, 'wb') as fp:
+                fp.write(buf)
+
+        Path(dest).mkdir(parents=True, exist_ok=True)
+
+        threads = []
+
+        reticle.reticles.pop("_io")
+        if not extract_hold:
+            reticle.reticles.pop("hold")
+
+        for k, v in reticle.reticles.items():
+
+            for i, ret in enumerate(v):
+
+                for j, z in enumerate(ret):
+
+                    if len(z) <= 0 or (j != 0 and ret[0] == z):
+                        continue
+
+                    filename = Path(dest, f"{k}_{str(i + 1)}_{j + 1}.bmp")
+                    threads.append(Thread(target=dump, args=[z.copy(), filename]))
+                    break
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            t.join()
+
+
     extract_reticle2(f'../../assets/example.pxl8', "../../assets/pxl8")
     extract_reticle2(f'../../assets/example.pxl4', "../../assets/pxl4")
