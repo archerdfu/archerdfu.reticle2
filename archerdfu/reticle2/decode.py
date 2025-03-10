@@ -1,9 +1,7 @@
-from typing import Type
-
 from construct import ConstructError
-from typing_extensions import IO
+from typing_extensions import IO, Any
 
-from archerdfu.reticle2.reticle2 import Reticle2Container, Reticle2ListContainer, reticle2img, Reticle2, Reticle2Frame
+from archerdfu.reticle2.reticle2 import Reticle2Container, Reticle2ListContainer, Reticle2, Reticle2Frame
 from archerdfu.reticle2.typedefs import TReticle2Parse
 
 
@@ -17,21 +15,20 @@ class Reticle2DecodeError(ValueError):
     def __init__(
             self,
             msg: str = DEPRECATED_DEFAULT,
-            doc: bytes = DEPRECATED_DEFAULT,
+            doc: Any = DEPRECATED_DEFAULT,
             path: str = DEPRECATED_DEFAULT,
             *args,
     ):
         if (
                 args
                 or not isinstance(msg, str)
-                or not isinstance(doc, bytes)
                 or not isinstance(path, str)
         ):
             import warnings
 
             warnings.warn(
                 "Free-form arguments for Reticle2DecodeError are deprecated. "
-                "Please set 'msg' (str), 'doc' (bytes) and 'path' (str) arguments only.",
+                "Please set 'msg' (str) and 'path' (str) arguments only.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -74,7 +71,7 @@ def loads(__b: bytes):
     except (ValueError, TypeError) as e:
         raise Reticle2DecodeError(str(e))
     except ConstructError as err:
-        raise Reticle2DecodeError("File parsing error", __b, err.path)
+        raise Reticle2DecodeError("File parsing error", path=err.path)
 
 
 def load(__fp: IO[bytes]):
@@ -93,9 +90,6 @@ if __name__ == '__main__':
 
         with open(src, 'rb') as fp:
             reticle = load(fp)
-
-        def dump(frame, path):
-            frame.save(path)
 
         Path(dest).mkdir(parents=True, exist_ok=True)
 

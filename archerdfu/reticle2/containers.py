@@ -1,3 +1,6 @@
+from operator import index
+
+
 class FixedSizeList(list):
     def __init__(self, *items, size=8, filler=None):
         self._size = size
@@ -30,10 +33,12 @@ class FixedSizeList(list):
         raise ValueError("Cannot delete items from a fixed-size list")
 
     def pop(self, index=-1):
-        raise ValueError("Cannot pop from a fixed-size list")
+        pop_item = self[index]
+        self[index] = self.filler
+        return pop_item
 
     def remove(self, value):
-        raise ValueError("Cannot remove items from a fixed-size list")
+        self[index] = self.filler
 
     def __repr__(self):
         return f"<{self.__class__.__name__}({super().__repr__()})>"
@@ -44,6 +49,7 @@ class RestrictedDict(dict):
     A dictionary that only allows predefined immutable keys and enforces
     that all values are of a specific type.
     """
+
     allowed_keys = {'name', 'age', 'email'}  # Example set of allowed keys
     value_type = (str, int)  # Example tuple of allowed value types
 
@@ -53,6 +59,10 @@ class RestrictedDict(dict):
         for key, value in self.items():
             self._validate_key(key)
             self._validate_value(value)
+
+        for key in self.allowed_keys:
+            if key not in self:
+                self[key] = None
 
     def _validate_key(self, key):
         if key not in self.allowed_keys:
@@ -73,5 +83,15 @@ class RestrictedDict(dict):
             self._validate_value(value)
         super().update(m, **kwargs)
 
+    def pop(self, key):
+        pop_item = self[key]
+        self[key] = None
+        return pop_item
+
+    def __getattr__(self, name):
+        if name in self.allowed_keys:
+            return self[name]
+
     def __repr__(self):
         return f'{self.__class__.__name__}({super().__repr__()})'
+

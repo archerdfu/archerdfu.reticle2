@@ -1,5 +1,6 @@
 from construct import Struct, RawCopy, Default, Int32sl, Const, Int32ul, Pointer, Rebuild, Index, Select, Switch, Array, \
     GreedyRange, ByteSwapped, BitStruct, BitsInteger, ListContainer, Computed, GreedyBytes
+from typing_extensions import Literal
 
 # PXL2ID = b'PXL2'
 PXL4ID = b'PXL4'
@@ -7,6 +8,8 @@ PXL8ID = b'PXL8'
 
 PXL4COUNT = 4
 PXL8COUNT = 8
+
+Reticle2Type = Literal[b'PXL4', b'PXL8']
 
 # PXL2Header = Struct(
 #     PXL2Id=Const(PXL2ID),
@@ -52,11 +55,15 @@ TReticle2FileHeader = Struct(
     ),
 )
 
+TReticle2FileHeaderSize = Int32sl[16].sizeof()
+
 TReticle2Index = Struct(
     'idx' / Index,
     'offset' / Default(Int32ul, 0),
     'quant' / Default(Int32ul, 0)
 )
+
+TReticle2IndexSize = Int32sl[2].sizeof()
 
 TReticle2IndexArray = Switch(
     lambda ctx: ctx._root.header.PXLId,
