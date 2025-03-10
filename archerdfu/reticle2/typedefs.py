@@ -1,5 +1,5 @@
 from construct import Struct, RawCopy, Default, Int32sl, Const, Int32ul, Pointer, Rebuild, Index, Select, Switch, Array, \
-    GreedyRange, Tell, ByteSwapped, BitStruct, BitsInteger, ListContainer, Computed
+    GreedyRange, ByteSwapped, BitStruct, BitsInteger, ListContainer, Computed, GreedyBytes
 
 # PXL2ID = b'PXL2'
 PXL4ID = b'PXL4'
@@ -14,7 +14,7 @@ PXL8COUNT = 8
 #     size_of_all_data_PXL2=Int32ul,
 # )
 
-TReticle2Header = Struct(
+TReticle2FileHeader = Struct(
     'PXLId' / Select(Const(PXL4ID), Const(PXL8ID)),
     'ReticleCount' / RawCopy(Default(Int32sl, 0)),
     'SizeOfAllDataPXL2' / RawCopy(Default(Int32ul, 0)),
@@ -72,58 +72,60 @@ TReticle2Data = ByteSwapped(BitStruct(
     'q' / BitsInteger(10),
 ))
 
-def compute_ret_data(ctx, index):
-    zooms = ListContainer()
+TReticle2DataSize = TReticle2Data.sizeof()
 
+
+def data_slice(ctx, index):
+    zooms = ListContainer()
     for i, zoom in enumerate(index):
-        if i == 0 or (i > 0 and index[i].offset != index[i - 1].offset) and zoom.quant > 0:
-            start = (zoom.offset - ctx._root.offset) // TReticle2Data.sizeof()
-            end = start + zoom.quant
-            zooms.append(ctx._root.data[start:end])
-        else:
-            zooms.append([])
+        start = (zoom.offset - ctx._root.data.offset1)
+        end = start + (zoom.quant * TReticle2DataSize)
+        zooms.append(ctx._root.data.value[start:end])
     return zooms
+
 
 TReticleComputed = Struct(
     'small' / Array(
         lambda ctx: len(ctx._root.index.small),
-        Computed(lambda ctx: compute_ret_data(ctx, ctx._root.index.small[ctx._index]))
+        Computed(lambda ctx: data_slice(ctx, ctx._root.index.small[ctx._index]))
     ),
     'hold' / Array(
         lambda ctx: len(ctx._root.index.hold),
-        Computed(lambda ctx: compute_ret_data(ctx, ctx._root.index.hold[ctx._index]))
+        Computed(lambda ctx: data_slice(ctx, ctx._root.index.hold[ctx._index]))
     ),
     'base' / Array(
         lambda ctx: len(ctx._root.index.base),
-        Computed(lambda ctx: compute_ret_data(ctx, ctx._root.index.base[ctx._index]))
+        Computed(lambda ctx: data_slice(ctx, ctx._root.index.base[ctx._index]))
     ),
     'lrf' / Array(
         lambda ctx: len(ctx._root.index.lrf),
-        Computed(lambda ctx: compute_ret_data(ctx, ctx._root.index.lrf[ctx._index]))
+        Computed(lambda ctx: data_slice(ctx, ctx._root.index.lrf[ctx._index]))
     )
 )
 
-TReticle2Parse = Struct(
+TReticle2IndexHeader = Struct(
+    'small' / Array(lambda ctx: ctx._root.header.SmallCount, TReticle2IndexArray),
+    'hold' / Array(lambda ctx: ctx._root.header.HoldOffCount, TReticle2IndexArray),
+    'base' / Array(lambda ctx: ctx._root.header.BaseCount, TReticle2IndexArray),
+    'lrf' / Array(lambda ctx: ctx._root.header.LrfCount, TReticle2IndexArray),
+)
 
-    'header' / TReticle2Header,
-    'index' / Struct(
-        'small' / Array(lambda ctx: ctx._root.header.SmallCount, TReticle2IndexArray),
-        'hold' / Array(lambda ctx: ctx._root.header.HoldOffCount, TReticle2IndexArray),
-        'base' / Array(lambda ctx: ctx._root.header.BaseCount, TReticle2IndexArray),
-        'lrf' / Array(lambda ctx: ctx._root.header.LrfCount, TReticle2IndexArray),
-    ),
-    'offset' / Tell,
-    'data' / GreedyRange(TReticle2Data),
+TReticle2Parse = Struct(
+    'header' / TReticle2FileHeader,
+    'index' / TReticle2IndexHeader,
+    'data' / RawCopy(GreedyBytes),
     'reticles' / TReticleComputed,
 )
 
 TReticle2Build = Struct(
-    'header' / TReticle2Header,
+    'header' / TReticle2FileHeader,
     'index' / Switch(
         lambda ctx: ctx._root.header.PXLId,
         {
-            PXL4ID: TReticle2Index[lambda ctx: (ctx.SmallCount + ctx.HoldOffCount + ctx.BaseCount + ctx.LrfCount) * PXL4COUNT],
-            PXL8ID: TReticle2Index[lambda ctx: (ctx.SmallCount + ctx.HoldOffCount + ctx.BaseCount + ctx.LrfCount) * PXL8COUNT]
+            PXL4ID: TReticle2Index[
+                lambda ctx: (ctx.SmallCount + ctx.HoldOffCount + ctx.BaseCount + ctx.LrfCount) * PXL4COUNT],
+            PXL8ID: TReticle2Index[
+                lambda ctx: (ctx.SmallCount + ctx.HoldOffCount + ctx.BaseCount + ctx.LrfCount) * PXL8COUNT]
         }
     ),
     'data' / GreedyRange(TReticle2Data)
