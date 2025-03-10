@@ -84,6 +84,7 @@ class RestrictedDict(dict):
         super().update(m, **kwargs)
 
     def pop(self, key):
+
         pop_item = self[key]
         self[key] = None
         return pop_item

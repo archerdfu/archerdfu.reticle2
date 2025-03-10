@@ -43,9 +43,10 @@ class Reticle2DecodeError(ValueError):
             return
 
 
-def loads(__b: bytes):
+def loads(__b: bytes, *, load_hold: bool = False):
     try:
         container = TReticle2Parse.parse(__b)
+
         reticle = Reticle2Container(
             small=Reticle2ListContainer(
                 *(Reticle2(
@@ -53,7 +54,10 @@ def loads(__b: bytes):
                 ) for reticle in container.reticles.small)
             ),
             hold=Reticle2ListContainer(
-            ),
+                *(Reticle2(
+                    *(Reticle2Frame(frame) for frame in reticle)
+                ) for reticle in container.reticles.hold)
+            ) if load_hold else Reticle2ListContainer(),
             base=Reticle2ListContainer(
                 *(Reticle2(
                     *(Reticle2Frame(frame) for frame in reticle)
@@ -65,8 +69,6 @@ def loads(__b: bytes):
                 ) for reticle in container.reticles.lrf)
             ),
         )
-        # print(reticle)
-        # return container
         return reticle
     except (ValueError, TypeError) as e:
         raise Reticle2DecodeError(str(e))
@@ -74,11 +76,11 @@ def loads(__b: bytes):
         raise Reticle2DecodeError("File parsing error", path=err.path)
 
 
-def load(__fp: IO[bytes]):
+def load(__fp: IO[bytes], *, load_hold: bool = False):
     if 'b' not in getattr(__fp, 'mode', ''):
         raise TypeError("File must be opened in binary mode, e.g. use `open('foo.reticle2', 'rb')`") from None
     b = __fp.read()
-    return loads(b)
+    return loads(b, load_hold=load_hold)
 
 
 if __name__ == '__main__':
@@ -89,15 +91,11 @@ if __name__ == '__main__':
     def extract_reticle2(src, dest, *, extract_hold=False):
 
         with open(src, 'rb') as fp:
-            reticle = load(fp)
+            reticle = load(fp, load_hold=extract_hold)
 
         Path(dest).mkdir(parents=True, exist_ok=True)
 
         threads = []
-
-        reticle.pop("_io", None)
-        if not extract_hold:
-            reticle.pop("hold")
 
         for k, con in reticle.items():
 
@@ -118,6 +116,6 @@ if __name__ == '__main__':
         for t in threads:
             t.join()
 
-
-    extract_reticle2(f'../../assets/example.pxl8', "../../assets/pxl8")
-    extract_reticle2(f'../../assets/example.pxl4', "../../assets/pxl4")
+    # extract_reticle2(f'../../assets/example.pxl8', "../../assets/pxl8")
+    # extract_reticle2(f'../../assets/example.pxl4', "../../assets/pxl4")
+    extract_reticle2(f'../../assets/dump.pxl4', "../../assets/dump", extract_hold=True)

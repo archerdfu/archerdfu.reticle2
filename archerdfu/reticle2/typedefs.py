@@ -17,6 +17,7 @@ Reticle2Type = Literal[b'PXL4', b'PXL8']
 #     size_of_all_data_PXL2=Int32ul,
 # )
 
+
 TReticle2FileHeader = Struct(
     'PXLId' / Select(Const(PXL4ID), Const(PXL8ID)),
     'ReticleCount' / RawCopy(Default(Int32sl, 0)),
@@ -29,7 +30,8 @@ TReticle2FileHeader = Struct(
     'HoldOffCount' / Default(Int32ul, 0),
     'OffsetHoldOff' / Default(Int32ul, 0),
     'HoldOffSize' / Default(Int32ul, 0),
-    'HoldOffCrc' / RawCopy(Default(Int32ul, 0)),
+    # 'HoldOffCrc' / RawCopy(Default(Int32ul, 0)),
+    'HoldOffCrc' / Default(Int32sl, 0),
 
     'BaseCount' / Default(Int32ul, 0),
     'OffsetBase' / Default(Int32ul, 0),

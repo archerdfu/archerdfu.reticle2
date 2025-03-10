@@ -19,7 +19,7 @@ def img2reticle(img: Image.Image) -> bytes:
 
 @dataclass(unsafe_hash=True)
 class Reticle2Frame:
-    _rle: bytes = field(init=False, default=b'', compare=True)
+    _rle: bytes = field(init=False, default=b'', compare=True, repr=False)
     _img: Optional[Image.Image] = field(init=False, default=None, compare=False)
 
     def __init__(self, __o: Union[bytes, Image.Image, None] = None):
@@ -78,14 +78,22 @@ class Reticle2(FixedSizeList):
             raise TypeError("Value should be a type of Reticle2Frame or None")
         super().__setitem__(index, value)
 
-    def size(self, __type: Reticle2Type = PXL4ID) -> int:
+    def __eq__(self, other):
+        if not isinstance(other, Reticle2):
+            return False
+        return tuple(self) == tuple(other)
+
+    def __hash__(self):
+        return hash(tuple(self))  # Convert list to tuple for hashing
+
+    def sizeof(self, __type: Reticle2Type = PXL4ID) -> int:
         if __type == PXL8ID:
-            return sum(len(i) for i in set(self[:PXL8COUNT]) if i is not None)
+            unique = set(self[:PXL8COUNT])
         elif __type == PXL4ID:
-            return sum(len(i) for i in set(self[:PXL4COUNT]) if i is not None)
+            unique = set(self[:PXL4COUNT])
         else:
             raise TypeError("Unsupported reticle2 type {!r}".format(__type))
-
+        return sum(len(i) for i in unique if i is not None)
 
 class Reticle2ListContainer(list):
     value_type = Optional[Reticle2]
@@ -103,8 +111,8 @@ class Reticle2ListContainer(list):
     def __repr__(self):
         return f"<{self.__class__.__name__}({super().__repr__()})>"
 
-    def size(self, __type: Reticle2Type = PXL4ID):
-        return sum(i.size(__type) for i in self)
+    def sizeof(self, __type: Reticle2Type = PXL4ID):
+        return sum(i.sizeof(__type) for i in set(self))
 
 
 class Reticle2Container(RestrictedDict):
@@ -115,8 +123,8 @@ class Reticle2Container(RestrictedDict):
     def count(self):
         return sum(len(v) for v in self.values() if v is not None)
 
-    def size(self, __type: Reticle2Type = PXL4ID):
-        return sum(v.size(__type) for v in self.values() if v is not None)
+    def sizeof(self, __type: Reticle2Type = PXL4ID):
+        return sum(v.sizeof(__type) for v in self.values() if v is not None)
 
 
 if __name__ == "__main__":
