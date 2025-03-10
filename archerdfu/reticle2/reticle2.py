@@ -6,7 +6,8 @@ from typing_extensions import Union, IO, Any, Optional, Literal
 
 from archerdfu.reticle2 import rle
 from archerdfu.reticle2.containers import FixedSizeList, RestrictedDict
-from archerdfu.reticle2.typedefs import Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT, PXL8COUNT
+from archerdfu.reticle2.typedefs import Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT, PXL8COUNT, TReticle2FileHeader, \
+    SMALL_RETICLES_COUNT, HOLD_RETICLES_COUNT, TReticle2FileHeaderSize, TReticle2Index, TReticle2Build
 
 
 def reticle2img(buffer: bytes, size=(640, 480)) -> Image.Image:
@@ -95,6 +96,7 @@ class Reticle2(FixedSizeList):
             raise TypeError("Unsupported reticle2 type {!r}".format(__type))
         return sum(len(i) for i in unique if i is not None)
 
+
 class Reticle2ListContainer(list):
     value_type = Optional[Reticle2]
 
@@ -119,12 +121,103 @@ class Reticle2Container(RestrictedDict):
     allowed_keys = {'small', 'hold', 'base', 'lrf'}
     value_type = Optional[Reticle2ListContainer]
 
+    small: Reticle2ListContainer
+    hold: Reticle2ListContainer
+    base: Reticle2ListContainer
+    lrf: Reticle2ListContainer
+
     @property
     def count(self):
         return sum(len(v) for v in self.values() if v is not None)
 
     def sizeof(self, __type: Reticle2Type = PXL4ID):
         return sum(v.sizeof(__type) for v in self.values() if v is not None)
+
+    def compress(self, __type: Reticle2Type = PXL4ID) -> bytes:
+        return _Compressor().build_index(self, __type)
+
+
+class _Compressor:
+    def __init__(self):
+        self.indexes = []
+        self.base_offset = 0
+        self.offset = 0
+        self.last_hash = None
+        self.buffer = b''
+
+    def _fill(self, __list: Reticle2ListContainer, reticle_count, zoom_count):
+        start_buf_len = len(self.buffer)
+
+        i = 0
+        for i, reticle in enumerate(__list[:reticle_count]):  # Process up to 20 reticles
+            for zoom in reticle[:zoom_count]:  # Process up to 8 zooms per reticle
+                if zoom is None or hash(zoom) == self.last_hash:
+                    self.indexes.append(self.indexes[-1])
+                else:
+                    # New zoom data, add it to buffer and create a new index
+                    self.buffer += zoom.rle
+                    self.indexes.append({'offset': self.offset, 'quant': len(zoom) // 4})
+                    self.offset = self.base_offset + len(self.buffer)
+                    self.last_hash = hash(zoom)
+
+        self.indexes.extend([self.indexes[-1]] * zoom_count * (reticle_count - 1 - i))
+        return len(self.buffer) - start_buf_len
+
+    def build_index(self, __o: Reticle2Container, __type: Reticle2Type = PXL4ID):
+        self.__init__()
+
+        if __type == PXL4ID:
+            zoom_count = PXL4COUNT
+        elif __type == PXL8ID:
+            zoom_count = PXL8COUNT
+        else:
+            raise TypeError("Unsupported reticle2 type {!r}".format(__type))
+
+        header_size = TReticle2FileHeaderSize
+        reticles_count = SMALL_RETICLES_COUNT + HOLD_RETICLES_COUNT + len(__o.base) + len(__o.lrf)
+        index_size = reticles_count * zoom_count * TReticle2Index.sizeof()
+
+        self.base_offset = header_size + index_size
+        self.offset = self.base_offset
+
+        small_offset = self.offset
+        small_size = self._fill(__o.small, SMALL_RETICLES_COUNT, zoom_count)
+        hold_offset = self.offset
+        hold_size = self._fill(__o.hold, HOLD_RETICLES_COUNT, zoom_count)
+        base_offset = self.offset
+        base_size = self._fill(__o.base, len(__o.base), zoom_count)
+        lrf_offset = self.offset
+        lrf_size = self._fill(__o.lrf, len(__o.lrf), zoom_count)
+
+        header = {
+            'PXLId': __type,
+            'ReticleCount': reticles_count,
+            'SizeOfAllDataPXL2': header_size + index_size + len(self.buffer),
+
+            'SmallCount': SMALL_RETICLES_COUNT,
+            'OffsetSmall': small_offset,
+            'SmallSize': small_size,
+
+            'HoldOffCount': HOLD_RETICLES_COUNT,
+            'OffsetHoldOff': hold_offset,
+            'HoldOffSize': hold_size,
+            'HoldOffCrc': 0,
+
+            'BaseCount': len(__o.base),
+            'OffsetBase': base_offset,
+            'BaseSize': base_size,
+
+            'LrfCount': len(__o.lrf),
+            'OffsetLrf': lrf_offset,
+            'LrfSize': lrf_size,
+        }
+
+        return TReticle2Build.build({
+            'header': header,
+            'index': self.indexes,
+            'data': self.buffer,
+        })
+
 
 
 if __name__ == "__main__":

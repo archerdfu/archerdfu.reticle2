@@ -51,22 +51,22 @@ def loads(__b: bytes, *, load_hold: bool = False):
             small=Reticle2ListContainer(
                 *(Reticle2(
                     *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles.small)
+                ) for reticle in container.reticles['small'])
             ),
             hold=Reticle2ListContainer(
                 *(Reticle2(
                     *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles.hold)
+                ) for reticle in container.reticles['hold'])
             ) if load_hold else Reticle2ListContainer(),
             base=Reticle2ListContainer(
                 *(Reticle2(
                     *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles.base)
+                ) for reticle in container.reticles['base'])
             ),
             lrf=Reticle2ListContainer(
                 *(Reticle2(
                     *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles.lrf)
+                ) for reticle in container.reticles['lrf'])
             ),
         )
         return reticle
