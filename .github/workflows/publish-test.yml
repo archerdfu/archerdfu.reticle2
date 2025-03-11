@@ -24,3 +24,7 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests
+
+      - name: Publish
+        run:
+          uv publish
