@@ -31,6 +31,12 @@ jobs:
         run:
           uv build
 
+#      - name: Publish
+#        run:
+#          uv publish --index testpypi
+
       - name: Publish
-        run:
-          uv publish --index testpypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          repository-url: https://test.pypi.org/legacy/
