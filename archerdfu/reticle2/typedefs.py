@@ -1,4 +1,4 @@
-from construct import (Struct, RawCopy, Default, Int32sl, Const, Int32ul, Index, Select, Switch,
+from construct import (Struct, RawCopy, Default, Int32sl, Const, Int32ul, Select, Switch,
                        ByteSwapped, BitStruct, BitsInteger, Computed, GreedyBytes)
 from typing_extensions import Literal
 
@@ -39,7 +39,6 @@ TReticle2FileHeader = Struct(
 TReticle2FileHeaderSize = Int32sl[16].sizeof()
 
 TReticle2Index = Struct(
-    'idx' / Index,
     'offset' / Default(Int32ul, 0),
     'quant' / Default(Int32ul, 0)
 )
@@ -63,7 +62,7 @@ TReticle2Data = ByteSwapped(BitStruct(
 TReticle2DataSize = TReticle2Data.sizeof()
 
 
-def data_slice(ctx, index):
+def _zoom_slice(ctx, index):
     zooms = []
     for i, zoom in enumerate(index):
         start = (zoom.offset - ctx._root.data.offset1)
@@ -71,12 +70,13 @@ def data_slice(ctx, index):
         zooms.append(ctx._root.data.value[start:end])
     return zooms
 
-def extract_reticles(ctx):
+
+def _reticles_slice(ctx):
     computed = {}
     for key in ('small', 'hold', 'base', 'lrf'):
         zooms = []
         for i in range(len(ctx._root.index[key])):
-            buf = data_slice(ctx, ctx._root.index[key][i])
+            buf = _zoom_slice(ctx, ctx._root.index[key][i])
             zooms.append(buf)
         computed[key] = zooms
     return computed
@@ -93,7 +93,7 @@ TReticle2Parse = Struct(
     'header' / TReticle2FileHeader,
     'index' / TReticle2IndexHeader,
     'data' / RawCopy(GreedyBytes),
-    'reticles' / Computed(extract_reticles),
+    'reticles' / Computed(_reticles_slice),
 )
 
 TReticle2Build = Struct(

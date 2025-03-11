@@ -1,15 +1,58 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "archerdfu.reticle2"
 version = "0.1.0"
-description = "Add your description here"
+authors = [
+    { name="o-murphy" },
+]
+description = "Module to operate and modify archer reticle2 files"
 requires-python = ">=3.10"
+keywords = ["ARCHER", "archerdfu", "pydfuutil", 'dfuutil']
+license = {file = "LICENSE"}
+classifiers = [
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
 dependencies = [
     "construct>=2.10.70",
     "pillow>=11.1.0",
     "typing-extensions>=4.12.2",
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/archerdfu/archerdfu.reticle2"
+"Bug Reports" = "https://github.com/archerdfu/archerdfu.reticle2/issues"
+"Source" = "https://github.com/archerdfu/archerdfu.reticle2"
+
+[tool.setuptools]
+py-modules = ["archerdfu.reticle2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["archerdfu*"]
+exclude = ["assets*", "tests*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+]
+
 [dependency-groups]
 dev = [
-    "pyqt6>=6.8.1",
+    "build>=1.2.2.post1",
+    "pytest>=8.3.5",
+    "setuptools>=76.0.0",
+    "wheel>=0.45.1",
 ]

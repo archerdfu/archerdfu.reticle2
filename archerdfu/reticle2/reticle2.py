@@ -5,9 +5,10 @@ from PIL import Image
 from typing_extensions import Union, IO, Any, Optional, Literal
 
 from archerdfu.reticle2 import rle
-from archerdfu.reticle2.containers import FixedSizeList, RestrictedDict
-from archerdfu.reticle2.typedefs import Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT, PXL8COUNT, TReticle2FileHeader, \
-    SMALL_RETICLES_COUNT, HOLD_RETICLES_COUNT, TReticle2FileHeaderSize, TReticle2Index, TReticle2Build
+from archerdfu.reticle2._containers import FixedSizeList, RestrictedDict
+from archerdfu.reticle2.typedefs import (Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT, PXL8COUNT,
+                                         SMALL_RETICLES_COUNT, HOLD_RETICLES_COUNT,
+                                         TReticle2FileHeaderSize, TReticle2Index, TReticle2Build, TReticle2Parse)
 
 
 def reticle2img(buffer: bytes, size=(640, 480)) -> Image.Image:
@@ -87,15 +88,6 @@ class Reticle2(FixedSizeList):
     def __hash__(self):
         return hash(tuple(self))  # Convert list to tuple for hashing
 
-    def sizeof(self, __type: Reticle2Type = PXL4ID) -> int:
-        if __type == PXL8ID:
-            unique = set(self[:PXL8COUNT])
-        elif __type == PXL4ID:
-            unique = set(self[:PXL4COUNT])
-        else:
-            raise TypeError("Unsupported reticle2 type {!r}".format(__type))
-        return sum(len(i) for i in unique if i is not None)
-
 
 class Reticle2ListContainer(list):
     value_type = Optional[Reticle2]
@@ -113,9 +105,6 @@ class Reticle2ListContainer(list):
     def __repr__(self):
         return f"<{self.__class__.__name__}({super().__repr__()})>"
 
-    def sizeof(self, __type: Reticle2Type = PXL4ID):
-        return sum(i.sizeof(__type) for i in set(self))
-
 
 class Reticle2Container(RestrictedDict):
     allowed_keys = {'small', 'hold', 'base', 'lrf'}
@@ -126,15 +115,37 @@ class Reticle2Container(RestrictedDict):
     base: Reticle2ListContainer
     lrf: Reticle2ListContainer
 
-    @property
-    def count(self):
-        return sum(len(v) for v in self.values() if v is not None)
+    def compress(self, __type: Reticle2Type = PXL4ID, *, compress_hold=False) -> bytes:
+        return _Compressor().build_index(self, __type, compress_hold=compress_hold)
 
-    def sizeof(self, __type: Reticle2Type = PXL4ID):
-        return sum(v.sizeof(__type) for v in self.values() if v is not None)
+    @staticmethod
+    def decompress(__b: bytes, *, decompress_hold: bool = False) -> 'Reticle2Container':
+        container = TReticle2Parse.parse(__b)
 
-    def compress(self, __type: Reticle2Type = PXL4ID) -> bytes:
-        return _Compressor().build_index(self, __type)
+        index, rle = None, None
+
+        reticle_container = Reticle2Container()
+
+        if decompress_hold:
+            keys = ('small', 'hold', 'base', 'lrf')
+        else:
+            keys = ('small', 'base', 'lrf')
+
+        for key in keys:
+            reticles_list = Reticle2ListContainer()
+            for i, subcon in enumerate(container.index[key]):
+                reticle = Reticle2()
+                for z, zoom in enumerate(subcon):
+                    _index = zoom
+                    if _index != index:
+                        _rle = container.reticles[key][i][z]
+                        if _rle != rle:
+                            reticle[z] = Reticle2Frame(_rle)
+                            rle = _rle
+                        index = _index
+                reticles_list.append(reticle)
+            reticle_container[key] = reticles_list
+        return reticle_container
 
 
 class _Compressor:
@@ -163,7 +174,7 @@ class _Compressor:
         self.indexes.extend([self.indexes[-1]] * zoom_count * (reticle_count - 1 - i))
         return len(self.buffer) - start_buf_len
 
-    def build_index(self, __o: Reticle2Container, __type: Reticle2Type = PXL4ID):
+    def build_index(self, __o: Reticle2Container, __type: Reticle2Type = PXL4ID, *, compress_hold=False):
         self.__init__()
 
         if __type == PXL4ID:
@@ -174,7 +185,8 @@ class _Compressor:
             raise TypeError("Unsupported reticle2 type {!r}".format(__type))
 
         header_size = TReticle2FileHeaderSize
-        reticles_count = SMALL_RETICLES_COUNT + HOLD_RETICLES_COUNT + len(__o.base) + len(__o.lrf)
+        hold_reticles_count = HOLD_RETICLES_COUNT if compress_hold else 0
+        reticles_count = SMALL_RETICLES_COUNT + hold_reticles_count + len(__o.base) + len(__o.lrf)
         index_size = reticles_count * zoom_count * TReticle2Index.sizeof()
 
         self.base_offset = header_size + index_size
@@ -183,7 +195,10 @@ class _Compressor:
         small_offset = self.offset
         small_size = self._fill(__o.small, SMALL_RETICLES_COUNT, zoom_count)
         hold_offset = self.offset
-        hold_size = self._fill(__o.hold, HOLD_RETICLES_COUNT, zoom_count)
+        if compress_hold:
+            hold_size = self._fill(__o.hold, hold_reticles_count, zoom_count)
+        else:
+            hold_size = 0
         base_offset = self.offset
         base_size = self._fill(__o.base, len(__o.base), zoom_count)
         lrf_offset = self.offset
@@ -198,7 +213,7 @@ class _Compressor:
             'OffsetSmall': small_offset,
             'SmallSize': small_size,
 
-            'HoldOffCount': HOLD_RETICLES_COUNT,
+            'HoldOffCount': hold_reticles_count,
             'OffsetHoldOff': hold_offset,
             'HoldOffSize': hold_size,
             'HoldOffCrc': 0,
@@ -217,7 +232,6 @@ class _Compressor:
             'index': self.indexes,
             'data': self.buffer,
         })
-
 
 
 if __name__ == "__main__":

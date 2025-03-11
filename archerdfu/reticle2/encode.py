@@ -3,8 +3,7 @@ from typing_extensions import IO, Any
 
 from archerdfu.reticle2.decode import DEPRECATED_DEFAULT
 from archerdfu.reticle2.reticle2 import Reticle2Container
-from archerdfu.reticle2.typedefs import Reticle2Type, PXL4ID, TReticle2FileHeaderSize, PXL8COUNT, \
-    TReticle2IndexSize, PXL8ID, PXL4COUNT
+from archerdfu.reticle2.typedefs import Reticle2Type, PXL4ID, PXL8ID
 
 
 class Reticle2EncodeError(ValueError):
@@ -40,20 +39,20 @@ class Reticle2EncodeError(ValueError):
             return
 
 
-def dumps(__o: Reticle2Container, __type: Reticle2Type = PXL4ID) -> bytes:
+def dumps(__o: Reticle2Container, __type: Reticle2Type = PXL4ID, *, dump_hold: bool = False) -> bytes:
     try:
         try:
-            return __o.compress(__type)
+            return __o.compress(__type, compress_hold=dump_hold)
         except ConstructError as err:
             raise Reticle2EncodeError("File building error", err.path)
     except (ValueError, TypeError) as e:
         raise Reticle2EncodeError(str(e))
 
 
-def dump(__o: Reticle2Container, __fp: IO[bytes], *, __type: Reticle2Type = PXL4ID) -> None:
+def dump(__o: Reticle2Container, __fp: IO[bytes], __type: Reticle2Type = PXL4ID, *, dump_hold: bool = False) -> None:
     if 'b' not in getattr(__fp, 'mode', ''):
         raise TypeError("File must be opened in binary mode, e.g. use `open('foo.reticle2', 'wb')`") from None
-    b = dumps(__o, __type)
+    b = dumps(__o, __type, dump_hold=dump_hold)
     __fp.write(b)
 
 
@@ -63,5 +62,8 @@ if __name__ == '__main__':
     with open(f'../../assets/dump.pxl4', 'rb') as fp:
         con = load(fp, load_hold=True)
 
-    with open("../../assets/dump2.pxl4", 'wb') as fp:
-        dump(con, fp, __type=PXL4ID)
+    with open("../../assets/dump3.pxl4", 'wb') as fp:
+        dump(con, fp, PXL4ID, dump_hold=True)
+
+    with open("../../assets/dump3.pxl8", 'wb') as fp:
+        dump(con, fp, PXL8ID, dump_hold=True)

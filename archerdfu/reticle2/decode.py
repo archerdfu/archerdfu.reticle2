@@ -1,8 +1,7 @@
 from construct import ConstructError
 from typing_extensions import IO, Any
 
-from archerdfu.reticle2.reticle2 import Reticle2Container, Reticle2ListContainer, Reticle2, Reticle2Frame
-from archerdfu.reticle2.typedefs import TReticle2Parse
+from archerdfu.reticle2.reticle2 import Reticle2Container
 
 
 class DEPRECATED_DEFAULT:
@@ -45,31 +44,7 @@ class Reticle2DecodeError(ValueError):
 
 def loads(__b: bytes, *, load_hold: bool = False):
     try:
-        container = TReticle2Parse.parse(__b)
-
-        reticle = Reticle2Container(
-            small=Reticle2ListContainer(
-                *(Reticle2(
-                    *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles['small'])
-            ),
-            hold=Reticle2ListContainer(
-                *(Reticle2(
-                    *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles['hold'])
-            ) if load_hold else Reticle2ListContainer(),
-            base=Reticle2ListContainer(
-                *(Reticle2(
-                    *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles['base'])
-            ),
-            lrf=Reticle2ListContainer(
-                *(Reticle2(
-                    *(Reticle2Frame(frame) for frame in reticle)
-                ) for reticle in container.reticles['lrf'])
-            ),
-        )
-        return reticle
+        return Reticle2Container.decompress(__b, decompress_hold=load_hold)
     except (ValueError, TypeError) as e:
         raise Reticle2DecodeError(str(e))
     except ConstructError as err:
@@ -115,6 +90,7 @@ if __name__ == '__main__':
 
         for t in threads:
             t.join()
+
 
     # extract_reticle2(f'../../assets/example.pxl8', "../../assets/pxl8")
     # extract_reticle2(f'../../assets/example.pxl4', "../../assets/pxl4")
