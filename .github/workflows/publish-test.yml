@@ -31,4 +31,4 @@ jobs:
 
       - name: Publish
         run:
-          uv publish
+          uv publish --index testpypi
