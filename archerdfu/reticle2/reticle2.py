@@ -42,7 +42,7 @@ class Reticle2Frame:
 
     @property
     def img(self) -> Image.Image:
-        return self.img
+        return self._img
 
     @rle.setter
     def rle(self, buffer: bytes):
