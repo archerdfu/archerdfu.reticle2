@@ -44,7 +44,7 @@ class Reticle2DecodeError(ValueError):
 
 def loads(__b: bytes, *, load_hold: bool = False):
     try:
-        return Reticle2Container.decompress(__b, decompress_hold=load_hold)
+        return Reticle2Container.decode(__b, decode_hold=load_hold)
     except (ValueError, TypeError) as e:
         raise Reticle2DecodeError(str(e))
     except ConstructError as err:

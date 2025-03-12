@@ -40,13 +40,13 @@ class Reticle2EncodeError(ValueError):
 
 
 def dumps(__o: Reticle2Container, __type: Reticle2Type = PXL4ID, *, dump_hold: bool = False) -> bytes:
-    try:
-        try:
-            return __o.compress(__type, compress_hold=dump_hold)
-        except ConstructError as err:
-            raise Reticle2EncodeError("File building error", err.path)
-    except (ValueError, TypeError) as e:
-        raise Reticle2EncodeError(str(e))
+    # try:
+    #     try:
+            return __o.encode(__type, encode_hold=dump_hold)
+    #     except ConstructError as err:
+    #         raise Reticle2EncodeError("File building error", err.path)
+    # except (ValueError, TypeError) as e:
+    #     raise Reticle2EncodeError(str(e))
 
 
 def dump(__o: Reticle2Container, __fp: IO[bytes], __type: Reticle2Type = PXL4ID, *, dump_hold: bool = False) -> None:

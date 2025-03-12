@@ -11,14 +11,6 @@ from archerdfu.reticle2.typedefs import (Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT
                                          TReticle2FileHeaderSize, TReticle2Index, TReticle2Build, TReticle2Parse)
 
 
-def reticle2img(buffer: bytes, size=(640, 480)) -> Image.Image:
-    return rle.decode(buffer, size)
-
-
-def img2reticle(img: Image.Image) -> bytes:
-    return rle.encode(img)
-
-
 @dataclass(unsafe_hash=True)
 class Reticle2Frame:
     _rle: bytes = field(init=False, default=b'', compare=True, repr=False)
@@ -47,12 +39,12 @@ class Reticle2Frame:
     @rle.setter
     def rle(self, buffer: bytes):
         self._rle = buffer
-        self._img = reticle2img(buffer)
+        self._img = rle.decode(buffer)
 
     @img.setter
     def img(self, img: Image.Image):
         self._img = img
-        self._rle = img2reticle(img)
+        self._rle = rle.encode(img)
 
     def save(self, fp: str | bytes | PathLike[str] | PathLike[bytes] | IO[bytes],
              format: str | None = None,
@@ -115,8 +107,109 @@ class Reticle2Container(RestrictedDict):
     base: Reticle2ListContainer
     lrf: Reticle2ListContainer
 
-    def compress(self, __type: Reticle2Type = PXL4ID, *, compress_hold=False) -> bytes:
-        return _Compressor().build_index(self, __type, compress_hold=compress_hold)
+    def encode(self, __type: Reticle2Type = PXL4ID, *, encode_hold=False) -> bytes:
+        return _Compressor().compress(self, __type, compress_hold=encode_hold)
+
+    @staticmethod
+    def decode(__b: bytes, *, decode_hold: bool = False) -> 'Reticle2Container':
+        return _Compressor.decompress(__b, decompress_hold=decode_hold)
+
+
+class _Compressor:
+    def __init__(self):
+        self.indexes = []
+        self.base_offset = 0
+        self.offset = 0
+        self.last_hash = None
+        self.buffer = bytearray()
+
+    def _compress_reticle_list(self, __list: Optional[Reticle2ListContainer], reticle_count, zoom_count) -> int:
+        start_buf_len = len(self.buffer)
+
+        if not __list:
+            self.indexes.extend([self.indexes[-1]] * reticle_count * zoom_count)
+            return 0
+
+        for i in range(reticle_count):
+            for z in range(zoom_count):
+
+                try:
+                    zoom = __list[i][z]
+                    if zoom is None or hash(zoom) == self.last_hash:
+                        raise IndexError("Empty or non-unique")
+                except IndexError:
+                    # writing previous index
+                    self.indexes.append(self.indexes[-1])
+                else:
+                    # writing new zoom data
+                    self.buffer += zoom.rle
+                    self.indexes.append({'offset': self.offset, 'quant': len(zoom) // 4})
+                    self.offset = self.base_offset + len(self.buffer)
+                    self.last_hash = hash(zoom)
+
+        return len(self.buffer) - start_buf_len
+
+    def compress(self, __o: Reticle2Container, __type: Reticle2Type = PXL4ID, *, compress_hold=False):
+        self.__init__()
+
+        if __type == PXL4ID:
+            zoom_count = PXL4COUNT
+        elif __type == PXL8ID:
+            zoom_count = PXL8COUNT
+        else:
+            raise TypeError("Unsupported reticle2 type {!r}".format(__type))
+
+        header_size = TReticle2FileHeaderSize
+        small_reticles_count = SMALL_RETICLES_COUNT if __o.small else 0
+        hold_reticles_count = HOLD_RETICLES_COUNT if compress_hold else 0
+        base_reticles_count = len(__o.base) if __o.base else 0
+        lrf_reticles_count = len(__o.lrf) if __o.lrf else 0
+        reticles_count = small_reticles_count + hold_reticles_count + base_reticles_count + lrf_reticles_count
+        index_size = reticles_count * zoom_count * TReticle2Index.sizeof()
+
+        self.base_offset = header_size + index_size
+        self.offset = self.base_offset
+
+        small_offset = self.offset
+        small_size = self._compress_reticle_list(__o.small, small_reticles_count, zoom_count)
+        hold_offset = self.offset
+        if compress_hold:
+            hold_size = self._compress_reticle_list(__o.hold, hold_reticles_count, zoom_count)
+        else:
+            hold_size = 0
+        base_offset = self.offset
+        base_size = self._compress_reticle_list(__o.base, base_reticles_count, zoom_count)
+        lrf_offset = self.offset
+        lrf_size = self._compress_reticle_list(__o.lrf, lrf_reticles_count, zoom_count)
+
+        header = {
+            'PXLId': __type,
+            'ReticleCount': reticles_count,
+            'SizeOfAllDataPXL2': header_size + index_size + len(self.buffer),
+
+            'SmallCount': SMALL_RETICLES_COUNT,
+            'OffsetSmall': small_offset,
+            'SmallSize': small_size,
+
+            'HoldOffCount': hold_reticles_count,
+            'OffsetHoldOff': hold_offset,
+            'HoldOffSize': hold_size,
+            'HoldOffCrc': 0,
+
+            'BaseCount': base_reticles_count,
+            'OffsetBase': base_offset,
+            'BaseSize': base_size,
+
+            'LrfCount': lrf_reticles_count,
+            'OffsetLrf': lrf_offset,
+            'LrfSize': lrf_size,
+        }
+
+        return TReticle2Build.build({
+            'header': header,
+            'index': self.indexes,
+            'data': self.buffer,
+        })
 
     @staticmethod
     def decompress(__b: bytes, *, decompress_hold: bool = False) -> 'Reticle2Container':
@@ -146,92 +239,6 @@ class Reticle2Container(RestrictedDict):
                 reticles_list.append(reticle)
             reticle_container[key] = reticles_list
         return reticle_container
-
-
-class _Compressor:
-    def __init__(self):
-        self.indexes = []
-        self.base_offset = 0
-        self.offset = 0
-        self.last_hash = None
-        self.buffer = b''
-
-    def _fill(self, __list: Reticle2ListContainer, reticle_count, zoom_count):
-        start_buf_len = len(self.buffer)
-
-        i = 0
-        for i, reticle in enumerate(__list[:reticle_count]):  # Process up to 20 reticles
-            for zoom in reticle[:zoom_count]:  # Process up to 8 zooms per reticle
-                if zoom is None or hash(zoom) == self.last_hash:
-                    self.indexes.append(self.indexes[-1])
-                else:
-                    # New zoom data, add it to buffer and create a new index
-                    self.buffer += zoom.rle
-                    self.indexes.append({'offset': self.offset, 'quant': len(zoom) // 4})
-                    self.offset = self.base_offset + len(self.buffer)
-                    self.last_hash = hash(zoom)
-
-        self.indexes.extend([self.indexes[-1]] * zoom_count * (reticle_count - 1 - i))
-        return len(self.buffer) - start_buf_len
-
-    def build_index(self, __o: Reticle2Container, __type: Reticle2Type = PXL4ID, *, compress_hold=False):
-        self.__init__()
-
-        if __type == PXL4ID:
-            zoom_count = PXL4COUNT
-        elif __type == PXL8ID:
-            zoom_count = PXL8COUNT
-        else:
-            raise TypeError("Unsupported reticle2 type {!r}".format(__type))
-
-        header_size = TReticle2FileHeaderSize
-        hold_reticles_count = HOLD_RETICLES_COUNT if compress_hold else 0
-        reticles_count = SMALL_RETICLES_COUNT + hold_reticles_count + len(__o.base) + len(__o.lrf)
-        index_size = reticles_count * zoom_count * TReticle2Index.sizeof()
-
-        self.base_offset = header_size + index_size
-        self.offset = self.base_offset
-
-        small_offset = self.offset
-        small_size = self._fill(__o.small, SMALL_RETICLES_COUNT, zoom_count)
-        hold_offset = self.offset
-        if compress_hold:
-            hold_size = self._fill(__o.hold, hold_reticles_count, zoom_count)
-        else:
-            hold_size = 0
-        base_offset = self.offset
-        base_size = self._fill(__o.base, len(__o.base), zoom_count)
-        lrf_offset = self.offset
-        lrf_size = self._fill(__o.lrf, len(__o.lrf), zoom_count)
-
-        header = {
-            'PXLId': __type,
-            'ReticleCount': reticles_count,
-            'SizeOfAllDataPXL2': header_size + index_size + len(self.buffer),
-
-            'SmallCount': SMALL_RETICLES_COUNT,
-            'OffsetSmall': small_offset,
-            'SmallSize': small_size,
-
-            'HoldOffCount': hold_reticles_count,
-            'OffsetHoldOff': hold_offset,
-            'HoldOffSize': hold_size,
-            'HoldOffCrc': 0,
-
-            'BaseCount': len(__o.base),
-            'OffsetBase': base_offset,
-            'BaseSize': base_size,
-
-            'LrfCount': len(__o.lrf),
-            'OffsetLrf': lrf_offset,
-            'LrfSize': lrf_size,
-        }
-
-        return TReticle2Build.build({
-            'header': header,
-            'index': self.indexes,
-            'data': self.buffer,
-        })
 
 
 if __name__ == "__main__":

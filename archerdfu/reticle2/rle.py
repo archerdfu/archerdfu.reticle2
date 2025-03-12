@@ -15,9 +15,37 @@ def unpack_record(data: bytes, *, byteorder: TByteorder = 'little') -> tuple[int
     return (r >> 20) & 0xFFF, (r >> 10) & 0x3FF, r & 0x3FF
 
 
-def encode(img: Image.Image, threshold: int = 127):
+def _adjust_img_size(img: Image.Image, size: tuple[int, int] | list[int] = (640, 480)):
+    if img.size == size:
+        return img.copy()
+
+    crop_width, crop_height = size
+    width, height = img.size
+
+    # If the image is smaller than the crop size, create a white background
+    if width < crop_width or height < crop_height:
+        new_img = Image.new("RGB", (crop_width, crop_height), "white")
+        paste_x = (crop_width - width) // 2
+        paste_y = (crop_height - height) // 2
+        new_img.paste(img, (paste_x, paste_y))
+        img = new_img  # Use the new padded image
+
+    # Calculate cropping box
+    left = (img.width - crop_width) // 2
+    top = (img.height - crop_height) // 2
+    right = left + crop_width
+    bottom = top + crop_height
+
+    # Crop the image
+    cropped_img = img.crop((left, top, right, bottom))
+
+    return cropped_img
+
+
+def encode(img: Image.Image, size: tuple[int, int] | list[int] = (640, 480), threshold: int = 127):
     # Відкриваємо зображення
     img = img.convert('RGB')  # Перетворюємо в RGB, якщо зображення має інший формат
+    img = _adjust_img_size(img, size)
 
     width, height = img.size
     pixels = img.load()
@@ -49,7 +77,7 @@ def encode(img: Image.Image, threshold: int = 127):
     return img.size, buffer
 
 
-def decode(buffer: bytes, size: tuple[int, int] | list[int]) -> Image.Image:
+def decode(buffer: bytes, size: tuple[int, int] | list[int] = (640, 480)) -> Image.Image:
     width, height, *_ = size
     img = Image.new('RGB', size, color='white')
     pixels = img.load()
@@ -60,36 +88,35 @@ def decode(buffer: bytes, size: tuple[int, int] | list[int]) -> Image.Image:
                 pixels[x + i, y] = (0, 0, 0)  # Чорний піксель
     return img
 
-
-if __name__ == '__main__':
-    from construct import ByteSwapped, BitStruct, BitsInteger
-
-    ReticleData = ByteSwapped(BitStruct(
-        'x' / BitsInteger(12),
-        'y' / BitsInteger(10),
-        'q' / BitsInteger(10),
-    ))
-
-    # Використання функції
-    img = Image.open('../../assets/sample1.bmp')
-    # img.show()
-
-    size, buf = encode(img)
-
-    img = decode(buf, size)
-    # img.show()
-    img.save('../../assets/sample2.bmp')
-
-    img = Image.open('../../assets/sample2.bmp')
-    img.show()
-
-    size2, buf2 = encode(img)
-
-    assert buf == buf2
-
-    b1 = pack_record(1, 2, 3)
-    b2 = ReticleData.build(dict(x=1, y=2, q=3))
-    print(b1, b2)
-    c1 = unpack_record(b1)
-    c2 = ReticleData.parse(b2)
-    print(c1, c2)
+# if __name__ == '__main__':
+#     from construct import ByteSwapped, BitStruct, BitsInteger
+#
+#     ReticleData = ByteSwapped(BitStruct(
+#         'x' / BitsInteger(12),
+#         'y' / BitsInteger(10),
+#         'q' / BitsInteger(10),
+#     ))
+#
+#     # Використання функції
+#     img = Image.open('../../assets/sample1.bmp')
+#     # img.show()
+#
+#     size, buf = encode(img)
+#
+#     img = decode(buf, size)
+#     # img.show()
+#     img.save('../../assets/sample2.bmp')
+#
+#     img = Image.open('../../assets/sample2.bmp')
+#     img.show()
+#
+#     size2, buf2 = encode(img)
+#
+#     assert buf == buf2
+#
+#     b1 = pack_record(1, 2, 3)
+#     b2 = ReticleData.build(dict(x=1, y=2, q=3))
+#     print(b1, b2)
+#     c1 = unpack_record(b1)
+#     c2 = ReticleData.parse(b2)
+#     print(c1, c2)
