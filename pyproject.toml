@@ -9,6 +9,7 @@ authors = [
     { name="o-murphy" },
 ]
 description = "Module to operate and modify archer reticle2 files"
+readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["ARCHER", "archerdfu", "pydfuutil", 'dfuutil']
 license = {file = "LICENSE"}
