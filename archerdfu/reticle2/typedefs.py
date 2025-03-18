@@ -5,8 +5,8 @@ from typing_extensions import Literal
 PXL4ID = b'PXL4'
 PXL8ID = b'PXL8'
 
-PXL4COUNT = 4
-PXL8COUNT = 8
+PXL4_ZOOM_COUNT = 4
+PXL8_ZOOM_COUNT = 8
 
 SMALL_RETICLES_COUNT = 20
 HOLD_RETICLES_COUNT = 20
@@ -48,8 +48,8 @@ TReticle2IndexSize = Int32sl[2].sizeof()
 TReticle2IndexArray = Switch(
     lambda ctx: ctx._root.header.PXLId,
     {
-        PXL4ID: TReticle2Index[PXL4COUNT],
-        PXL8ID: TReticle2Index[PXL8COUNT],
+        PXL4ID: TReticle2Index[PXL4_ZOOM_COUNT],
+        PXL8ID: TReticle2Index[PXL8_ZOOM_COUNT],
     }
 )
 
@@ -74,11 +74,11 @@ def _zoom_slice(ctx, index):
 def _reticles_slice(ctx):
     computed = {}
     for key in ('small', 'hold', 'base', 'lrf'):
-        zooms = []
+        reticle = []
         for i in range(len(ctx._root.index[key])):
             buf = _zoom_slice(ctx, ctx._root.index[key][i])
-            zooms.append(buf)
-        computed[key] = zooms
+            reticle.append(buf)
+        computed[key] = reticle
     return computed
 
 
@@ -101,8 +101,8 @@ TReticle2Build = Struct(
     'index' / Switch(
         lambda ctx: ctx._root.header.PXLId,
         {
-            PXL4ID: TReticle2Index[lambda ctx: ctx._root.header.ReticleCount * PXL4COUNT],
-            PXL8ID: TReticle2Index[lambda ctx: ctx._root.header.ReticleCount * PXL8COUNT]
+            PXL4ID: TReticle2Index[lambda ctx: ctx._root.header.ReticleCount * PXL4_ZOOM_COUNT],
+            PXL8ID: TReticle2Index[lambda ctx: ctx._root.header.ReticleCount * PXL8_ZOOM_COUNT]
         }
     ),
     'data' / GreedyBytes
