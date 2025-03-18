@@ -6,7 +6,7 @@ from typing_extensions import Union, IO, Any, Optional, Literal
 
 from archerdfu.reticle2 import rle
 from archerdfu.reticle2._containers import FixedSizeList, RestrictedDict
-from archerdfu.reticle2.typedefs import (Reticle2Type, PXL4ID, PXL8ID, PXL4COUNT, PXL8COUNT,
+from archerdfu.reticle2.typedefs import (Reticle2Type, PXL4ID, PXL8ID, PXL4_ZOOM_COUNT, PXL8_ZOOM_COUNT,
                                          SMALL_RETICLES_COUNT, HOLD_RETICLES_COUNT,
                                          TReticle2FileHeaderSize, TReticle2Index, TReticle2Build, TReticle2Parse)
 
@@ -153,9 +153,9 @@ class _Compressor:
         self.__init__()
 
         if __type == PXL4ID:
-            zoom_count = PXL4COUNT
+            zoom_count = PXL4_ZOOM_COUNT
         elif __type == PXL8ID:
-            zoom_count = PXL8COUNT
+            zoom_count = PXL8_ZOOM_COUNT
         else:
             raise TypeError("Unsupported reticle2 type {!r}".format(__type))
 
